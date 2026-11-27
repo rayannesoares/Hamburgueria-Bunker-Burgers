@@ -1,29 +1,19 @@
 window.BunkerAuth = (function () {
-  const API_BASE = "/api/auth";
   const SESSION_KEY = "bunker_session_v1";
   const STAFF_KEY = "bunker_burgers_staff_v1";
 
   let onSessionReady = null;
   let lastPendingEmail = "";
 
-  function isStaticGitHubPages() {
-    return window.location.hostname.endsWith("github.io");
-  }
-
   function setRouteHash(route) {
-    if (window.location.hash !== `#${route}`) {
-      window.history.replaceState(null, "", `#${route}`);
+    const normalized = route.startsWith("/") ? route : `/${route}`;
+    if (window.location.hash !== `#${normalized}`) {
+      window.history.replaceState(null, "", `#${normalized}`);
     }
   }
 
   function hideAllPortals() {
-    const ids = [
-      "publicMenuScreen",
-      "portalGerenteLogin",
-      "portalFuncionario",
-      "appShell"
-    ];
-    ids.forEach((id) => {
+    ["publicMenuScreen", "portalGerenteLogin", "portalFuncionario", "appShell"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = true;
     });
@@ -63,48 +53,51 @@ window.BunkerAuth = (function () {
   }
 
   function getStaff() {
-    return readStorage(STAFF_KEY, []);
+    const list = readStorage(STAFF_KEY, []);
+    return Array.isArray(list) ? list : [];
   }
 
   function saveStaff(list) {
-    writeStorage(STAFF_KEY, list);
+    writeStorage(STAFF_KEY, Array.isArray(list) ? list : []);
   }
 
   function upsertStaffMember(member) {
     const list = getStaff();
-    const emailLower = String(member.email || "").toLowerCase();
-    const index = list.findIndex(
-      (item) => String(item.email || "").toLowerCase() === emailLower
+    const emailLower = String(member.email || "").trim().toLowerCase();
+    const idx = list.findIndex(
+      (item) => String(item.email || "").trim().toLowerCase() === emailLower
     );
 
     const record = {
-      id: member.id || (index >= 0 ? list[index].id : `staff_${Date.now()}`),
-      name: member.name || (index >= 0 ? list[index].name : "Funcionário"),
-      phone: member.phone || (index >= 0 ? list[index].phone : ""),
-      roleTitle:
-        member.roleTitle || (index >= 0 ? list[index].roleTitle : "Atendente / Caixa"),
-      email: member.email,
+      id: member.id || (idx >= 0 ? list[idx].id : Date.now()),
+      name: member.name || (idx >= 0 ? list[idx].name : "Funcionário"),
+      phone: member.phone || (idx >= 0 ? list[idx].phone : ""),
+      roleTitle: member.roleTitle || (idx >= 0 ? list[idx].roleTitle : "Atendente / Caixa"),
+      email: (member.email || "").trim(),
       status: member.status || "PENDENTE",
-      createdAt: index >= 0 ? list[index].createdAt : new Date().toISOString()
+      createdAt: idx >= 0 ? list[idx].createdAt : new Date().toISOString()
     };
 
-    if (index >= 0) {
-      list[index] = { ...list[index], ...record };
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...record };
     } else {
-      list.push(record);
+      list.unshift(record);
     }
 
     saveStaff(list);
     return record;
   }
 
-  function setStaffStatus(email, status) {
-    const emailLower = String(email || "").toLowerCase();
-    const list = getStaff().map((item) =>
-      String(item.email || "").toLowerCase() === emailLower
-        ? { ...item, status, updatedAt: new Date().toISOString() }
-        : item
-    );
+  function setStaffStatus(emailOrId, status) {
+    const target = String(emailOrId || "").trim().toLowerCase();
+    const list = getStaff().map((item) => {
+      const matchEmail = String(item.email || "").trim().toLowerCase() === target;
+      const matchId = String(item.id || "").trim().toLowerCase() === target;
+      if (matchEmail || matchId) {
+        return { ...item, status, updatedAt: new Date().toISOString() };
+      }
+      return item;
+    });
     saveStaff(list);
     return list;
   }
@@ -114,8 +107,7 @@ window.BunkerAuth = (function () {
     if (!grid) return;
 
     const items = (window.BUNKER_DATA?.menu || []).filter(
-      (item) =>
-        item.available && (category === "todos" || item.category === category)
+      (item) => item.available && (category === "todos" || item.category === category)
     );
 
     grid.innerHTML = items
@@ -138,44 +130,28 @@ window.BunkerAuth = (function () {
       .join("");
   }
 
-  async function verifySession() {
-    if (isStaticGitHubPages()) {
-      return getSession();
-    }
-
-    try {
-      const resp = await fetch(`${API_BASE}/sessao`, { credentials: "include" });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data && data.authenticated && data.user) {
-          return data;
-        }
-      }
-    } catch {}
-    return getSession();
-  }
-
   function showRoute(route) {
-    setRouteHash(route);
+    const targetRoute = route || "/gerente/login";
+    setRouteHash(targetRoute);
     hideAllPortals();
 
-    if (route === "/cardapio-publico") {
+    if (targetRoute === "/cardapio-publico") {
       const el = document.getElementById("publicMenuScreen");
       if (el) el.hidden = false;
       renderPublicMenu("todos");
       return;
     }
 
-    if (route === "/gerente/login") {
+    if (targetRoute === "/gerente/login") {
       const el = document.getElementById("portalGerenteLogin");
       if (el) el.hidden = false;
       return;
     }
 
     if (
-      route === "/funcionario/login" ||
-      route === "/funcionario/cadastro" ||
-      route === "/funcionario/pendente"
+      targetRoute === "/funcionario/login" ||
+      targetRoute === "/funcionario/cadastro" ||
+      targetRoute === "/funcionario/pendente"
     ) {
       const portal = document.getElementById("portalFuncionario");
       const loginForm = document.getElementById("funcionarioLoginForm");
@@ -183,42 +159,33 @@ window.BunkerAuth = (function () {
       const pendBox = document.getElementById("funcionarioPendenteBox");
 
       if (portal) portal.hidden = false;
-      if (loginForm) loginForm.hidden = route !== "/funcionario/login";
-      if (cadForm) cadForm.hidden = route !== "/funcionario/cadastro";
-      if (pendBox) pendBox.hidden = route !== "/funcionario/pendente";
+      if (loginForm) loginForm.hidden = targetRoute !== "/funcionario/login";
+      if (cadForm) cadForm.hidden = targetRoute !== "/funcionario/cadastro";
+      if (pendBox) pendBox.hidden = targetRoute !== "/funcionario/pendente";
 
-      document
-        .getElementById("tabFuncLogin")
-        ?.classList.toggle("active", route === "/funcionario/login");
-      document
-        .getElementById("tabFuncCadastro")
-        ?.classList.toggle("active", route === "/funcionario/cadastro");
-      document
-        .getElementById("tabFuncPendente")
-        ?.classList.toggle("active", route === "/funcionario/pendente");
+      document.getElementById("tabFuncLogin")?.classList.toggle("active", targetRoute === "/funcionario/login");
+      document.getElementById("tabFuncCadastro")?.classList.toggle("active", targetRoute === "/funcionario/cadastro");
+      document.getElementById("tabFuncPendente")?.classList.toggle("active", targetRoute === "/funcionario/pendente");
       return;
     }
 
-    verifySession().then((session) => {
-      if (!session || !session.authenticated) {
-        showRoute(
-          route.startsWith("/funcionario") ? "/funcionario/login" : "/gerente/login"
-        );
-        return;
-      }
+    const session = getSession();
+    if (!session.authenticated) {
+      showRoute(targetRoute.startsWith("/funcionario") ? "/funcionario/login" : "/gerente/login");
+      return;
+    }
 
-      if (route === "/gerente/dashboard" && session.user.role !== "GERENTE") {
-        showRoute("/funcionario/dashboard");
-        return;
-      }
+    if (targetRoute === "/gerente/dashboard" && session.user.role !== "GERENTE") {
+      showRoute("/funcionario/dashboard");
+      return;
+    }
 
-      const shell = document.getElementById("appShell");
-      if (shell) shell.hidden = false;
+    const shell = document.getElementById("appShell");
+    if (shell) shell.hidden = false;
 
-      if (typeof onSessionReady === "function") {
-        onSessionReady(session.user, route);
-      }
-    });
+    if (typeof onSessionReady === "function") {
+      onSessionReady(session.user, targetRoute);
+    }
   }
 
   function bindEvents() {
@@ -239,253 +206,121 @@ window.BunkerAuth = (function () {
 
     document.querySelectorAll("[data-pub-cat]").forEach((pill) => {
       pill.addEventListener("click", () => {
-        document
-          .querySelectorAll("[data-pub-cat]")
-          .forEach((p) => p.classList.remove("active"));
+        document.querySelectorAll("[data-pub-cat]").forEach((p) => p.classList.remove("active"));
         pill.classList.add("active");
         renderPublicMenu(pill.dataset.pubCat);
       });
     });
 
-    // Login Gerente
-    document
-      .getElementById("gerenteLoginForm")
-      ?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const msg = document.getElementById("gerenteLoginMsg");
-        const email =
-          (document.getElementById("gerenteEmail")?.value || "").trim() ||
-          "gerente@bunkerburgers.com.br";
-        const password = document.getElementById("gerentePassword")?.value || "";
-        const remember = Boolean(
-          document.getElementById("rememberGerente")?.checked
-        );
+    document.getElementById("gerenteLoginForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("gerenteLoginMsg");
+      const email =
+        (document.getElementById("gerenteEmail")?.value || "").trim() || "gerente@bunkerburgers.com.br";
 
-        if (msg) msg.textContent = "Validando acesso...";
-
-        if (!isStaticGitHubPages()) {
-          try {
-            const resp = await fetch(`${API_BASE}/gerente/login`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ email, password, remember })
-            });
-            if (resp.ok) {
-              if (msg) msg.textContent = "";
-              showRoute("/gerente/dashboard");
-              return;
-            }
-          } catch {}
-        }
-
-        setSession({
-          name: "Gerente Bunker",
-          email,
-          role: "GERENTE",
-          unit: "Nilópolis • RJ"
-        });
-        if (msg) msg.textContent = "";
-        showRoute("/gerente/dashboard");
+      setSession({
+        name: "Gerente Bunker",
+        email,
+        role: "GERENTE",
+        roleTitle: "Gerente",
+        unit: "Nilópolis • RJ"
       });
 
-    // Login Funcionário
-    document
-      .getElementById("funcionarioLoginForm")
-      ?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const msg = document.getElementById("funcLoginMsg");
-        const email =
-          (document.getElementById("funcLoginEmail")?.value || "").trim() ||
-          "equipe@bunkerburgers.com.br";
-        const password = document.getElementById("funcLoginPassword")?.value || "";
-        lastPendingEmail = email;
+      if (msg) msg.textContent = "";
+      showRoute("/gerente/dashboard");
+    });
 
-        if (msg) msg.textContent = "Verificando conta...";
+    document.getElementById("funcionarioLoginForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("funcLoginMsg");
+      const email =
+        (document.getElementById("funcLoginEmail")?.value || "").trim() || "equipe@bunkerburgers.com.br";
+      lastPendingEmail = email;
 
-        if (!isStaticGitHubPages()) {
-          try {
-            const resp = await fetch(`${API_BASE}/funcionario/login`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ email, password })
-            });
-            const data = await resp.json().catch(() => ({}));
+      const existing = getStaff().find(
+        (s) => String(s.email || "").trim().toLowerCase() === email.toLowerCase()
+      );
 
-            if (resp.status === 403 && data.status === "PENDENTE") {
-              const desc = document.getElementById("pendenteDescricao");
-              if (desc) {
-                desc.textContent = `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
-              }
-              showRoute("/funcionario/pendente");
-              return;
-            }
-
-            if (resp.ok) {
-              if (msg) msg.textContent = "";
-              showRoute("/funcionario/dashboard");
-              return;
-            }
-          } catch {}
-        }
-
-        const existing = getStaff().find(
-          (s) => String(s.email || "").toLowerCase() === email.toLowerCase()
-        );
-
-        if (existing && existing.status === "PENDENTE") {
-          const desc = document.getElementById("pendenteDescricao");
-          if (desc) {
-            desc.textContent = `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
-          }
-          showRoute("/funcionario/pendente");
-          return;
-        }
-
-        setSession({
-          name: existing?.name || "Equipe Bunker",
-          email,
-          role: "FUNCIONARIO",
-          roleTitle: existing?.roleTitle || "Atendente / Caixa",
-          unit: "Nilópolis • RJ"
-        });
-        if (msg) msg.textContent = "";
-        showRoute("/funcionario/dashboard");
-      });
-
-    // Cadastro Funcionário
-    document
-      .getElementById("funcionarioCadastroForm")
-      ?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const msg = document.getElementById("funcCadMsg");
-        const senha = document.getElementById("funcCadSenha")?.value || "";
-        const confirmar =
-          document.getElementById("funcCadConfirmarSenha")?.value || "";
-
-        if (senha !== confirmar) {
-          if (msg)
-            msg.textContent = "A senha e a confirmação de senha não coincidem.";
-          return;
-        }
-
-        const name = (document.getElementById("funcCadNome")?.value || "").trim();
-        const phone = (
-          document.getElementById("funcCadTelefone")?.value || ""
-        ).trim();
-        const roleTitle =
-          document.getElementById("funcCadCargo")?.value || "Atendente / Caixa";
-        const inviteCode = (
-          document.getElementById("funcCadConvite")?.value || ""
-        ).trim();
-        const email = (
-          document.getElementById("funcCadEmail")?.value || ""
-        ).trim();
-        lastPendingEmail = email;
-
-        if (msg) msg.textContent = "Enviando solicitação de cadastro...";
-
-        if (!isStaticGitHubPages()) {
-          try {
-            const resp = await fetch(`${API_BASE}/funcionario/cadastro`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name,
-                phone,
-                roleTitle,
-                inviteCode,
-                email,
-                password: senha
-              })
-            });
-            if (resp.ok) {
-              if (msg) msg.textContent = "";
-              e.target.reset();
-              const desc = document.getElementById("pendenteDescricao");
-              if (desc) {
-                desc.textContent = `Cadastro de ${email} enviado com sucesso. Aguarde a aprovação do gerente.`;
-              }
-              showRoute("/funcionario/pendente");
-              return;
-            }
-          } catch {}
-        }
-
-        upsertStaffMember({
-          name,
-          phone,
-          roleTitle,
-          email,
-          status: "PENDENTE"
-        });
-
-        if (msg) msg.textContent = "";
-        e.target.reset();
+      if (existing && String(existing.status).toUpperCase() === "PENDENTE") {
         const desc = document.getElementById("pendenteDescricao");
         if (desc) {
-          desc.textContent = `Cadastro de ${email} registrado para aprovação do gerente.`;
+          desc.textContent = `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
         }
         showRoute("/funcionario/pendente");
+        return;
+      }
+
+      setSession({
+        name: existing?.name || "Equipe Bunker",
+        email,
+        role: "FUNCIONARIO",
+        roleTitle: existing?.roleTitle || "Atendente / Caixa",
+        unit: "Nilópolis • RJ"
       });
 
-    // Verificar Aprovação
-    document
-      .getElementById("recheckApprovalBtn")
-      ?.addEventListener("click", async () => {
-        const desc = document.getElementById("pendenteDescricao");
-        if (!lastPendingEmail) {
-          showRoute("/funcionario/login");
-          return;
-        }
+      if (msg) msg.textContent = "";
+      showRoute("/funcionario/dashboard");
+    });
 
-        if (!isStaticGitHubPages()) {
-          try {
-            const resp = await fetch(
-              `${API_BASE}/funcionario/status?email=${encodeURIComponent(lastPendingEmail)}`
-            );
-            if (resp.ok) {
-              const data = await resp.json();
-              if (data.status === "APROVADO") {
-                showRoute("/funcionario/login");
-                return;
-              }
-              if (desc) {
-                desc.textContent = `Status atual de ${lastPendingEmail}: ${data.status || "PENDENTE"}.`;
-              }
-              return;
-            }
-          } catch {}
-        }
+    document.getElementById("funcionarioCadastroForm")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("funcCadMsg");
+      const senha = document.getElementById("funcCadSenha")?.value || "";
+      const confirmar = document.getElementById("funcCadConfirmarSenha")?.value || "";
 
-        const member = getStaff().find(
-          (s) =>
-            String(s.email || "").toLowerCase() ===
-            lastPendingEmail.toLowerCase()
-        );
-        const status = member?.status || "PENDENTE";
+      if (senha !== confirmar) {
+        if (msg) msg.textContent = "A senha e a confirmação de senha não coincidem.";
+        return;
+      }
 
-        if (status === "APROVADO") {
-          showRoute("/funcionario/login");
-          return;
-        }
+      const name = (document.getElementById("funcCadNome")?.value || "").trim();
+      const phone = (document.getElementById("funcCadTelefone")?.value || "").trim();
+      const roleTitle = document.getElementById("funcCadCargo")?.value || "Atendente / Caixa";
+      const email = (document.getElementById("funcCadEmail")?.value || "").trim();
+      lastPendingEmail = email;
 
-        if (desc) {
-          desc.textContent = `Status atual de ${lastPendingEmail}: ${status}.`;
-        }
+      upsertStaffMember({
+        name,
+        phone,
+        roleTitle,
+        email,
+        status: "PENDENTE"
       });
+
+      if (msg) msg.textContent = "";
+      e.target.reset();
+
+      const desc = document.getElementById("pendenteDescricao");
+      if (desc) {
+        desc.textContent = `Cadastro de ${email} enviado. Aguarde a aprovação do gerente.`;
+      }
+      showRoute("/funcionario/pendente");
+    });
+
+    document.getElementById("recheckApprovalBtn")?.addEventListener("click", () => {
+      const desc = document.getElementById("pendenteDescricao");
+      if (!lastPendingEmail) {
+        showRoute("/funcionario/login");
+        return;
+      }
+
+      const member = getStaff().find(
+        (s) => String(s.email || "").trim().toLowerCase() === lastPendingEmail.toLowerCase()
+      );
+      const status = String(member?.status || "PENDENTE").toUpperCase();
+
+      if (status === "APROVADO") {
+        showRoute("/funcionario/login");
+        return;
+      }
+
+      if (desc) {
+        desc.textContent = `Status atual de ${lastPendingEmail}: ${status}.`;
+      }
+    });
   }
 
-  async function logout() {
-    if (!isStaticGitHubPages()) {
-      try {
-        await fetch(`${API_BASE}/logout`, {
-          method: "POST",
-          credentials: "include"
-        });
-      } catch {}
-    }
+  function logout() {
     clearSession();
     showRoute("/gerente/login");
   }
@@ -494,7 +329,6 @@ window.BunkerAuth = (function () {
     onSessionReady = callback;
     bindEvents();
 
-    const path = window.location.pathname;
     const hashRoute = window.location.hash.replace(/^#/, "");
     const knownRoutes = [
       "/gerente/login",
@@ -506,12 +340,7 @@ window.BunkerAuth = (function () {
       "/cardapio-publico"
     ];
 
-    const initialRoute = knownRoutes.includes(path)
-      ? path
-      : knownRoutes.includes(hashRoute)
-        ? hashRoute
-        : "/gerente/login";
-
+    const initialRoute = knownRoutes.includes(hashRoute) ? hashRoute : "/gerente/login";
     showRoute(initialRoute);
   }
 
@@ -520,7 +349,7 @@ window.BunkerAuth = (function () {
     showRoute,
     logout,
     getStaff,
-    approveStaff: (email) => setStaffStatus(email, "APROVADO"),
-    rejectStaff: (email) => setStaffStatus(email, "RECUSADO")
+    approveStaff: (emailOrId) => setStaffStatus(emailOrId, "APROVADO"),
+    rejectStaff: (emailOrId) => setStaffStatus(emailOrId, "RECUSADO")
   };
 })();
