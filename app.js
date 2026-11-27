@@ -1,6 +1,23 @@
 const STORAGE_STATE_KEY = "bunker_burgers_nilopolis_full_v1";
 const STAFF_PORTAL_STORAGE_KEY = "bunker_burgers_staff_v1";
 
+const EMPLOYEE_ALLOWED_SECTIONS = [
+  "visao-geral",
+  "pedidos",
+  "cardapio",
+  "cozinha",
+  "pdv",
+  "entregas"
+];
+
+const MANAGER_ONLY_SECTIONS = [
+  "funcionarios",
+  "financeiro",
+  "relatorios",
+  "permissoes",
+  "configuracoes"
+];
+
 const SECTION_META = {
   "visao-geral": { title: "1. Visão geral", sub: "Resumo operacional e metas do dia" },
   "pedidos": { title: "2. Pedidos", sub: "Gestão completa de pedidos recebidos, preparo e entrega" },
@@ -132,6 +149,12 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;");
 }
 
+function isCurrentUserManager() {
+  const role = String(state.currentUser?.role || "").toUpperCase();
+  const title = String(state.currentUser?.roleTitle || "").toLowerCase();
+  return role === "GERENTE" || title.includes("gerente");
+}
+
 function getUserAvatarIcon(user) {
   const role = String(user?.role || "").toUpperCase();
   const title = String(user?.roleTitle || "").toLowerCase();
@@ -188,23 +211,26 @@ function updateNotifyBadges() {
 }
 
 function getAllowedSectionsForCurrentUser() {
-  const user = state.currentUser || { role: "GERENTE" };
-  if (Array.isArray(user.permissions) && user.permissions.length > 0) {
-    return user.permissions;
+  if (isCurrentUserManager()) {
+    return Object.keys(SECTION_META);
   }
-  const roleKey = user.role === "GERENTE" ? "Gerente" : user.role;
-  return (state.permissions && state.permissions[roleKey]) || Object.keys(SECTION_META);
+
+  const user = state.currentUser || {};
+  if (Array.isArray(user.permissions) && user.permissions.length > 0) {
+    const filtered = user.permissions.filter((sec) => !MANAGER_ONLY_SECTIONS.includes(sec));
+    if (filtered.length > 0) return filtered;
+  }
+
+  return EMPLOYEE_ALLOWED_SECTIONS;
 }
 
 function applyRolePermissions() {
   const allowed = getAllowedSectionsForCurrentUser();
-  const isManager =
-    state.currentUser?.role === "Gerente" || state.currentUser?.role === "GERENTE";
+  const isManager = isCurrentUserManager();
 
   document.querySelectorAll(".nav-item[data-section]").forEach((btn) => {
     const sec = btn.dataset.section;
-    const isAdminOnly = sec === "permissoes" || sec === "configuracoes";
-    const isAllowed = allowed.includes(sec) && (!isAdminOnly || isManager);
+    const isAllowed = allowed.includes(sec) && (isManager || !MANAGER_ONLY_SECTIONS.includes(sec));
     const parentGroup = btn.closest(".nav-group");
 
     if (parentGroup) {
@@ -217,9 +243,11 @@ function applyRolePermissions() {
   const nameEl = document.getElementById("activeUserName");
   const roleEl = document.getElementById("activeUserRole");
   const avatarEl = document.querySelector(".profile-avatar");
-  if (nameEl) nameEl.textContent = state.currentUser?.name || "Gerente Bunker";
+  if (nameEl) {
+    nameEl.textContent = state.currentUser?.name || (isManager ? "Gerente Bunker" : "Equipe Bunker");
+  }
   if (roleEl) {
-    const cargoLabel = state.currentUser?.roleTitle || state.currentUser?.role || "Gerente";
+    const cargoLabel = state.currentUser?.roleTitle || (isManager ? "Gerente" : "Funcionário");
     roleEl.textContent = `${cargoLabel} • Nilópolis`;
   }
   if (avatarEl) {
@@ -333,7 +361,11 @@ function renderVisaoGeral(el) {
             <h2>Desempenho Anual (Receitas x Despesas)</h2>
             <p>Comparativo mensal do ${escapeHtml(state.shopName)}</p>
           </div>
-          <button type="button" class="btn-outline" onclick="navigate('relatorios')">Ver Relatórios</button>
+          ${
+            isCurrentUserManager()
+              ? `<button type="button" class="btn-outline" onclick="navigate('relatorios')">Ver Relatórios</button>`
+              : ""
+          }
         </div>
         <div class="bars-area">
           ${(state.monthlyStats || [])
@@ -411,7 +443,11 @@ function renderPedidos(el) {
                   </td>
                   <td style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" class="btn-sm" onclick="advanceOrderStatus(${o.id})">Avançar Status</button>
-                    <button type="button" class="btn-sm danger" onclick="deleteOrder(${o.id})">Remover</button>
+                    ${
+                      isCurrentUserManager()
+                        ? `<button type="button" class="btn-sm danger" onclick="deleteOrder(${o.id})">Remover</button>`
+                        : ""
+                    }
                   </td>
                 </tr>
               `
@@ -439,6 +475,7 @@ window.advanceOrderStatus = function (id) {
 };
 
 window.deleteOrder = function (id) {
+  if (!isCurrentUserManager()) return;
   state.orders = state.orders.filter((o) => o.id !== id);
   persistState();
   renderWorkspace();
@@ -447,6 +484,7 @@ window.deleteOrder = function (id) {
 /* 3. CARDÁPIO DIGITAL */
 function renderCardapio(el) {
   const q = state.searchQuery.trim().toLowerCase();
+  const canManageMenu = isCurrentUserManager();
   const items = (state.menu || []).filter((m) => {
     const okCat = state.menuCategory === "todos" || m.category === state.menuCategory;
     const okSearch =
@@ -461,7 +499,7 @@ function renderCardapio(el) {
     <div class="section-header">
       <div>
         <h2>Cardápio Digital com Fotos</h2>
-        <p>Gerencie burgers, combos, acompanhamentos e bebidas com preços e disponibilidade</p>
+        <p>${canManageMenu ? "Gerencie burgers, combos, acompanhamentos e bebidas com preços e disponibilidade" : "Consulta de disponibilidade dos itens no turno"}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <select id="menuCatSelect" class="btn-sm" style="padding:8px 12px;">
@@ -471,7 +509,7 @@ function renderCardapio(el) {
           <option value="acompanhamentos" ${state.menuCategory === "acompanhamentos" ? "selected" : ""}>Acompanhamentos</option>
           <option value="bebidas" ${state.menuCategory === "bebidas" ? "selected" : ""}>Bebidas</option>
         </select>
-        <button type="button" class="btn-primary" onclick="openMenuModal()">+ Novo Produto</button>
+        ${canManageMenu ? `<button type="button" class="btn-primary" onclick="openMenuModal()">+ Novo Produto</button>` : ""}
       </div>
     </div>
 
@@ -495,8 +533,12 @@ function renderCardapio(el) {
                 <span class="burger-price">${brl(item.price)}</span>
                 <div style="display:flex;gap:5px;">
                   <button type="button" class="btn-sm" onclick="toggleMenuAvail(${item.id})">${item.available ? "Pausar" : "Ativar"}</button>
-                  <button type="button" class="btn-sm" onclick="openMenuModal(${item.id})">Editar</button>
-                  <button type="button" class="btn-sm danger" onclick="deleteMenuItem(${item.id})">Excluir</button>
+                  ${
+                    canManageMenu
+                      ? `<button type="button" class="btn-sm" onclick="openMenuModal(${item.id})">Editar</button>
+                         <button type="button" class="btn-sm danger" onclick="deleteMenuItem(${item.id})">Excluir</button>`
+                      : ""
+                  }
                 </div>
               </div>
             </div>
@@ -524,12 +566,14 @@ window.toggleMenuAvail = function (id) {
 };
 
 window.deleteMenuItem = function (id) {
+  if (!isCurrentUserManager()) return;
   state.menu = state.menu.filter((m) => m.id !== id);
   persistState();
   renderWorkspace();
 };
 
 window.openMenuModal = function (itemId = null) {
+  if (!isCurrentUserManager()) return;
   const existing = itemId !== null ? state.menu.find((m) => m.id === itemId) : null;
 
   openModal(
@@ -667,7 +711,7 @@ window.openCustomerModal = function () {
   });
 };
 
-/* 5. FUNCIONÁRIOS */
+/* 5. FUNCIONÁRIOS (Exclusivo para Gerente) */
 function normalizeStaffStatus(status) {
   const s = String(status || "").toUpperCase();
   if (s === "APROVADO") return "Aprovado";
@@ -725,7 +769,7 @@ function mergePortalStaffIntoState() {
       permissions:
         existingIdx >= 0 && Array.isArray(state.staff[existingIdx].permissions)
           ? state.staff[existingIdx].permissions
-          : []
+          : EMPLOYEE_ALLOWED_SECTIONS
     };
 
     if (existingIdx >= 0) {
@@ -762,6 +806,7 @@ function syncStaffStateToPortalStorage() {
 }
 
 function syncStaffFromStorage() {
+  if (!isCurrentUserManager()) return;
   mergePortalStaffIntoState();
   persistState();
   if (state.activeSection === "funcionarios") {
@@ -771,6 +816,11 @@ function syncStaffFromStorage() {
 }
 
 function renderFuncionariosTable(el) {
+  if (!isCurrentUserManager()) {
+    navigate("visao-geral");
+    return;
+  }
+
   mergePortalStaffIntoState();
   const pendingCount = (state.staff || []).filter((s) => s.status === "Pendente").length;
 
@@ -809,7 +859,7 @@ function renderFuncionariosTable(el) {
                     : s.status === "Pendente"
                       ? "orange"
                       : "red";
-                const perms = s.permissions || state.permissions?.[s.role] || [];
+                const perms = s.permissions || state.permissions?.[s.role] || EMPLOYEE_ALLOWED_SECTIONS;
                 const contactInfo = [s.email, s.phone, s.shift].filter(Boolean).join(" • ");
                 return `
                   <tr>
@@ -853,7 +903,6 @@ function renderFuncionariosTable(el) {
 }
 
 function renderFuncionarios(el) {
-  mergePortalStaffIntoState();
   renderFuncionariosTable(el);
 }
 
@@ -861,8 +910,9 @@ window.syncStaffFromStorage = syncStaffFromStorage;
 window.syncStaffFromBackend = syncStaffFromStorage;
 
 window.deleteStaffUser = function (id) {
+  if (!isCurrentUserManager()) return;
   const person = (state.staff || []).find((s) => s.id === id);
-  if (!person) return;
+  if (!person || person.role === "Gerente") return;
 
   state.staff = (state.staff || []).filter((s) => s.id !== id);
   syncStaffStateToPortalStorage();
@@ -872,6 +922,7 @@ window.deleteStaffUser = function (id) {
 };
 
 window.setStaffStatus = function (id, nextStatus) {
+  if (!isCurrentUserManager()) return;
   const person = (state.staff || []).find((s) => s.id === id);
   if (!person) return;
 
@@ -890,6 +941,7 @@ window.setStaffStatus = function (id, nextStatus) {
 };
 
 window.openStaffModal = function () {
+  if (!isCurrentUserManager()) return;
   openModal(
     "Cadastrar Novo Funcionário",
     `
@@ -931,7 +983,7 @@ window.openStaffModal = function () {
       role,
       shift: "18:00 - 00:00",
       status: "Aprovado",
-      permissions: state.permissions?.[role] || ["visao-geral", "pedidos", "cardapio", "pdv"]
+      permissions: role === "Gerente" ? Object.keys(SECTION_META) : EMPLOYEE_ALLOWED_SECTIONS
     });
     syncStaffStateToPortalStorage();
     persistState();
@@ -941,11 +993,12 @@ window.openStaffModal = function () {
 };
 
 window.openEditStaffModal = function (id) {
+  if (!isCurrentUserManager()) return;
   const person = state.staff.find((s) => s.id === id);
   if (!person) return;
 
   const allModules = Object.keys(SECTION_META);
-  const currentPerms = person.permissions || state.permissions?.[person.role] || [];
+  const currentPerms = person.permissions || EMPLOYEE_ALLOWED_SECTIONS;
 
   openModal(
     `Editar Funcionário — ${escapeHtml(person.name)}`,
@@ -1082,8 +1135,13 @@ window.restockItem = function (id) {
   renderWorkspace();
 };
 
-/* 8. FINANCEIRO */
+/* 8. FINANCEIRO (Exclusivo para Gerente) */
 function renderFinanceiro(el) {
+  if (!isCurrentUserManager()) {
+    navigate("visao-geral");
+    return;
+  }
+
   const income = (state.transactions || [])
     .filter((t) => t.type === "entrada")
     .reduce((acc, t) => acc + Number(t.amount || 0), 0);
@@ -1323,8 +1381,13 @@ function renderAvaliacoes(el) {
   `;
 }
 
-/* 13. RELATÓRIOS */
+/* 13. RELATÓRIOS (Exclusivo para Gerente) */
 function renderRelatorios(el) {
+  if (!isCurrentUserManager()) {
+    navigate("visao-geral");
+    return;
+  }
+
   const totalOrders = (state.orders || []).length + 24;
   const totalRevenue = (state.orders || []).reduce((acc, o) => acc + Number(o.total || 0), 0) + 722.5;
   el.innerHTML = `
@@ -1338,6 +1401,12 @@ function renderRelatorios(el) {
 
 /* 14. NOTIFICAÇÕES */
 function renderNotificacoes(el) {
+  const list = isCurrentUserManager()
+    ? state.notifications || []
+    : (state.notifications || []).filter(
+        (n) => !String(n.title || "").toLowerCase().includes("funcionário")
+      );
+
   el.innerHTML = `
     <div class="card">
       <div class="section-header">
@@ -1346,9 +1415,9 @@ function renderNotificacoes(el) {
       </div>
       <div style="display:grid;gap:8px;margin-top:12px;">
         ${
-          (state.notifications || []).length === 0
+          list.length === 0
             ? `<p style="color:var(--text-muted);">Nenhuma notificação no momento.</p>`
-            : state.notifications
+            : list
                 .map(
                   (n) => `
               <div class="kpi-box" style="opacity:${n.read ? 0.65 : 1};">
@@ -1373,8 +1442,13 @@ window.markAllNotificationsRead = function () {
   renderWorkspace();
 };
 
-/* 15. PERMISSÕES */
+/* 15. PERMISSÕES (Exclusivo para Gerente) */
 function renderPermissoes(el) {
+  if (!isCurrentUserManager()) {
+    navigate("visao-geral");
+    return;
+  }
+
   const roles = Object.keys(state.permissions || {});
   el.innerHTML = `
     <div class="card">
@@ -1397,8 +1471,13 @@ function renderPermissoes(el) {
   `;
 }
 
-/* 16. CONFIGURAÇÕES */
+/* 16. CONFIGURAÇÕES (Exclusivo para Gerente) */
 function renderConfiguracoes(el) {
+  if (!isCurrentUserManager()) {
+    navigate("visao-geral");
+    return;
+  }
+
   el.innerHTML = `
     <div class="card">
       <h2>Configurações da Hamburgueria</h2>
@@ -1465,10 +1544,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if (window.BunkerAuth && typeof window.BunkerAuth.init === "function") {
     window.BunkerAuth.init((user) => {
       state.currentUser = user;
-      mergePortalStaffIntoState();
+      state.activeSection = "visao-geral";
+      if (isCurrentUserManager()) {
+        mergePortalStaffIntoState();
+      }
       persistState();
       applyRolePermissions();
-      navigate(state.activeSection || "visao-geral");
+      navigate("visao-geral");
     });
   } else {
     applyRolePermissions();
