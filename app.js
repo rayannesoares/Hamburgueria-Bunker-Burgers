@@ -132,31 +132,14 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;");
 }
 
-function getAuthHeaders() {
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("bunker_token") ||
-    sessionStorage.getItem("token") ||
-    sessionStorage.getItem("bunker_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 function getUserAvatarIcon(user) {
   const role = String(user?.role || "").toUpperCase();
   const title = String(user?.roleTitle || "").toLowerCase();
 
-  if (role === "GERENTE" || title.includes("gerente")) {
-    return "👔";
-  }
-  if (title.includes("chapeiro") || title.includes("cozinha")) {
-    return "👨‍🍳";
-  }
-  if (title.includes("motoboy") || title.includes("entregador")) {
-    return "🛵";
-  }
-  if (title.includes("atendente") || title.includes("caixa")) {
-    return "🧑‍💼";
-  }
+  if (role === "GERENTE" || title.includes("gerente")) return "👔";
+  if (title.includes("chapeiro") || title.includes("cozinha")) return "👨‍🍳";
+  if (title.includes("motoboy") || title.includes("entregador")) return "🛵";
+  if (title.includes("atendente") || title.includes("caixa")) return "🧑‍💼";
   return "👤";
 }
 
@@ -684,7 +667,7 @@ window.openCustomerModal = function () {
   });
 };
 
-/* 5. FUNCIONÁRIOS (Sincronizado com localStorage / demo e /api/users) */
+/* 5. FUNCIONÁRIOS */
 function normalizeStaffStatus(status) {
   const s = String(status || "").toUpperCase();
   if (s === "APROVADO") return "Aprovado";
@@ -778,39 +761,12 @@ function syncStaffStateToPortalStorage() {
   writePortalStaffStorage(updatedPortal);
 }
 
-async function syncStaffFromBackend() {
+function syncStaffFromStorage() {
   mergePortalStaffIntoState();
   persistState();
-
-  try {
-    const res = await fetch("/api/users", {
-      headers: { ...getAuthHeaders() },
-      credentials: "include"
-    });
-    if (!res.ok) return;
-
-    const data = await res.json();
-    if (!Array.isArray(data.users)) return;
-
-    state.staff = data.users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      phone: u.phone || "",
-      role: u.role === "GERENTE" ? "Gerente" : u.role_title || "Atendente",
-      shift: String(u.status || "").toUpperCase() === "PENDENTE" ? "Aguardando aprovação" : "18:00 - 00:00",
-      status: normalizeStaffStatus(u.status),
-      permissions: Array.isArray(u.permissions) ? u.permissions : []
-    }));
-
-    mergePortalStaffIntoState();
-    persistState();
-    if (state.activeSection === "funcionarios") {
-      const container = document.getElementById("workspace");
-      if (container) renderFuncionariosTable(container);
-    }
-  } catch (_err) {
-    // Em modo estático (GitHub Pages), usa os dados locais e do portal de cadastro
+  if (state.activeSection === "funcionarios") {
+    const container = document.getElementById("workspace");
+    if (container) renderFuncionariosTable(container);
   }
 }
 
@@ -829,7 +785,7 @@ function renderFuncionariosTable(el) {
           </p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" class="btn-sm" onclick="syncStaffFromBackend()">Atualizar Lista</button>
+          <button type="button" class="btn-sm" onclick="syncStaffFromStorage()">Atualizar Lista</button>
           <button type="button" class="btn-primary" onclick="openStaffModal()">+ Cadastrar Funcionário</button>
         </div>
       </div>
@@ -899,22 +855,14 @@ function renderFuncionariosTable(el) {
 function renderFuncionarios(el) {
   mergePortalStaffIntoState();
   renderFuncionariosTable(el);
-  syncStaffFromBackend();
 }
 
-window.syncStaffFromBackend = syncStaffFromBackend;
+window.syncStaffFromStorage = syncStaffFromStorage;
+window.syncStaffFromBackend = syncStaffFromStorage;
 
-window.deleteStaffUser = async function (id) {
+window.deleteStaffUser = function (id) {
   const person = (state.staff || []).find((s) => s.id === id);
   if (!person) return;
-
-  try {
-    await fetch(`/api/users/${id}`, {
-      method: "DELETE",
-      headers: { ...getAuthHeaders() },
-      credentials: "include"
-    });
-  } catch {}
 
   state.staff = (state.staff || []).filter((s) => s.id !== id);
   syncStaffStateToPortalStorage();
@@ -923,7 +871,7 @@ window.deleteStaffUser = async function (id) {
   renderWorkspace();
 };
 
-window.setStaffStatus = async function (id, nextStatus) {
+window.setStaffStatus = function (id, nextStatus) {
   const person = (state.staff || []).find((s) => s.id === id);
   if (!person) return;
 
@@ -937,16 +885,593 @@ window.setStaffStatus = async function (id, nextStatus) {
     `Funcionário ${person.status}`,
     `${person.name} (${person.role}) teve o status alterado para ${person.status}.`
   );
-
-  try {
-    await fetch(`/api/users/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      credentials: "include",
-      body: JSON.stringify({ status: toBackendStaffStatus(person.status) })
-    });
-  } catch {}
-
   persistState();
   renderWorkspace();
 };
+
+window.openStaffModal = function () {
+  openModal(
+    "Cadastrar Novo Funcionário",
+    `
+      <form id="newStaffForm">
+        <div class="form-group">
+          <label>Nome completo</label>
+          <input type="text" id="nsName" required placeholder="Ex.: Lucas Almeida" />
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" id="nsEmail" required placeholder="lucas@bunkerburgers.com.br" />
+        </div>
+        <div class="form-group">
+          <label>Telefone</label>
+          <input type="text" id="nsPhone" placeholder="(21) 99999-0000" />
+        </div>
+        <div class="form-group">
+          <label>Cargo</label>
+          <select id="nsRole">
+            <option value="Atendente / Caixa">Atendente / Caixa</option>
+            <option value="Chapeiro / Cozinha">Chapeiro / Cozinha</option>
+            <option value="Motoboy / Entregador">Motoboy / Entregador</option>
+            <option value="Gerente">Gerente</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-primary full-btn">Salvar Funcionário</button>
+      </form>
+    `
+  );
+
+  document.getElementById("newStaffForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const role = document.getElementById("nsRole").value;
+    state.staff.unshift({
+      id: Date.now(),
+      name: document.getElementById("nsName").value.trim(),
+      email: document.getElementById("nsEmail").value.trim(),
+      phone: document.getElementById("nsPhone").value.trim(),
+      role,
+      shift: "18:00 - 00:00",
+      status: "Aprovado",
+      permissions: state.permissions?.[role] || ["visao-geral", "pedidos", "cardapio", "pdv"]
+    });
+    syncStaffStateToPortalStorage();
+    persistState();
+    closeModal();
+    renderWorkspace();
+  });
+};
+
+window.openEditStaffModal = function (id) {
+  const person = state.staff.find((s) => s.id === id);
+  if (!person) return;
+
+  const allModules = Object.keys(SECTION_META);
+  const currentPerms = person.permissions || state.permissions?.[person.role] || [];
+
+  openModal(
+    `Editar Funcionário — ${escapeHtml(person.name)}`,
+    `
+      <form id="editStaffForm">
+        <div class="form-group">
+          <label>Nome completo</label>
+          <input type="text" id="esName" value="${escapeHtml(person.name)}" required />
+        </div>
+        <div class="form-group">
+          <label>Cargo</label>
+          <input type="text" id="esRole" value="${escapeHtml(person.role)}" required />
+        </div>
+        <div class="form-group">
+          <label>Turno</label>
+          <input type="text" id="esShift" value="${escapeHtml(person.shift || "18:00 - 00:00")}" />
+        </div>
+        <div class="form-group">
+          <label>Módulos liberados</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:170px;overflow:auto;padding:6px;border:1px solid var(--border);border-radius:8px;">
+            ${allModules
+              .map(
+                (mod) => `
+                <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;margin:0;">
+                  <input type="checkbox" name="esPerms" value="${mod}" ${currentPerms.includes(mod) ? "checked" : ""} />
+                  ${escapeHtml(SECTION_META[mod].title)}
+                </label>
+              `
+              )
+              .join("")}
+          </div>
+        </div>
+        <button type="submit" class="btn-primary full-btn">Salvar Alterações</button>
+      </form>
+    `
+  );
+
+  document.getElementById("editStaffForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    person.name = document.getElementById("esName").value.trim();
+    person.role = document.getElementById("esRole").value.trim();
+    person.shift = document.getElementById("esShift").value.trim();
+    person.permissions = Array.from(
+      document.querySelectorAll('input[name="esPerms"]:checked')
+    ).map((cb) => cb.value);
+
+    syncStaffStateToPortalStorage();
+    persistState();
+    closeModal();
+    renderWorkspace();
+  });
+};
+
+/* 6. COZINHA (KDS) */
+function renderCozinha(el) {
+  const activeOrders = (state.orders || []).filter(
+    (o) => o.status === "Recebido" || o.status === "Em preparo" || o.status === "Pronto"
+  );
+
+  el.innerHTML = `
+    <div class="section-header">
+      <div>
+        <h2>Painel KDS — Cozinha e Chapa</h2>
+        <p>${activeOrders.length} pedido(s) na fila de produção</p>
+      </div>
+      <button type="button" class="btn-primary" onclick="navigate('pedidos')">Ver Todos os Pedidos</button>
+    </div>
+    <div class="grid-3">
+      ${
+        activeOrders.length === 0
+          ? `<div class="card"><p style="color:var(--text-muted);">Nenhum pedido na fila da cozinha agora.</p></div>`
+          : activeOrders
+              .map(
+                (o) => `
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong>#${o.id} • ${escapeHtml(o.customer)}</strong>
+              <span class="badge ${o.status === "Pronto" ? "green" : "orange"}">${escapeHtml(o.status)}</span>
+            </div>
+            <p style="font-size:0.88rem;margin-bottom:10px;">${escapeHtml(o.items)}</p>
+            <small style="color:var(--text-muted);display:block;margin-bottom:10px;">${escapeHtml(o.type)} • ${escapeHtml(o.createdAt)}</small>
+            <button type="button" class="btn-primary full-btn" onclick="advanceOrderStatus(${o.id})">Avançar Etapa</button>
+          </div>
+        `
+              )
+              .join("")
+      }
+    </div>
+  `;
+}
+
+/* 7. ESTOQUE */
+function renderEstoque(el) {
+  el.innerHTML = `
+    <div class="card">
+      <div class="section-header">
+        <div>
+          <h2>Controle de Insumos e Estoque</h2>
+          <p>Acompanhe quantidades mínimas e registre reposições</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Insumo</th><th>Atual</th><th>Mínimo</th><th>Status</th><th>Ação</th></tr>
+          </thead>
+          <tbody>
+            ${(state.inventory || [])
+              .map((item) => {
+                const low = Number(item.qty) <= Number(item.min);
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(item.name)}</strong></td>
+                    <td>${item.qty} ${escapeHtml(item.unit)}</td>
+                    <td>${item.min} ${escapeHtml(item.unit)}</td>
+                    <td><span class="badge ${low ? "red" : "green"}">${low ? "Baixo" : "OK"}</span></td>
+                    <td><button type="button" class="btn-sm" onclick="restockItem(${item.id})">+10 ${escapeHtml(item.unit)}</button></td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+window.restockItem = function (id) {
+  const item = (state.inventory || []).find((i) => i.id === id);
+  if (!item) return;
+  item.qty = Number(item.qty || 0) + 10;
+  persistState();
+  renderWorkspace();
+};
+
+/* 8. FINANCEIRO */
+function renderFinanceiro(el) {
+  const income = (state.transactions || [])
+    .filter((t) => t.type === "entrada")
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+  const expense = (state.transactions || [])
+    .filter((t) => t.type === "saida")
+    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+
+  el.innerHTML = `
+    <div class="grid-3">
+      <div class="kpi-box"><div class="kpi-title">Entradas</div><div class="kpi-num">${brl(income)}</div></div>
+      <div class="kpi-box"><div class="kpi-title">Saídas</div><div class="kpi-num">${brl(expense)}</div></div>
+      <div class="kpi-box"><div class="kpi-title">Saldo Líquido</div><div class="kpi-num">${brl(income - expense)}</div></div>
+    </div>
+    <div class="card">
+      <h2>Movimentações Recentes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <tbody>
+            ${(state.transactions || [])
+              .map(
+                (t) => `
+                <tr>
+                  <td>${escapeHtml(t.date)}</td>
+                  <td>${escapeHtml(t.desc)}</td>
+                  <td><span class="badge ${t.type === "entrada" ? "green" : "red"}">${escapeHtml(t.type)}</span></td>
+                  <td><strong>${brl(t.amount)}</strong></td>
+                </tr>
+              `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+/* 9. PDV */
+function renderPdv(el) {
+  const available = (state.menu || []).filter((m) => m.available);
+  const cartTotal = (state.pdvCart || []).reduce((acc, item) => acc + item.price * item.qty, 0);
+
+  el.innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <h2>Produtos Disponíveis</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:12px;">
+          ${available
+            .map(
+              (m) => `
+              <div class="kpi-box" style="cursor:pointer;" onclick="addToPdvCart(${m.id})">
+                <strong>${escapeHtml(m.name)}</strong>
+                <div style="color:var(--accent);font-weight:700;margin-top:6px;">${brl(m.price)}</div>
+                <small style="color:var(--text-muted);">+ Adicionar</small>
+              </div>
+            `
+            )
+            .join("")}
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Carrinho do Pedido</h2>
+        <form id="pdvCheckoutForm" style="margin-top:12px;">
+          <div class="form-group">
+            <label>Cliente</label>
+            <input type="text" id="pdvCustomer" required value="Cliente Balcão" />
+          </div>
+          <div class="form-group">
+            <label>Canal</label>
+            <select id="pdvType">
+              <option value="Balcão">Balcão</option>
+              <option value="Delivery">Delivery</option>
+              <option value="Mesa">Mesa</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Pagamento</label>
+            <select id="pdvPayment">
+              <option value="Pix">Pix</option>
+              <option value="Cartão Crédito">Cartão Crédito</option>
+              <option value="Cartão Débito">Cartão Débito</option>
+              <option value="Dinheiro">Dinheiro</option>
+            </select>
+          </div>
+          <div style="margin:12px 0;padding:10px;border:1px solid var(--border);border-radius:8px;">
+            ${
+              state.pdvCart.length === 0
+                ? `<small style="color:var(--text-muted);">Selecione itens ao lado para lançar o pedido.</small>`
+                : state.pdvCart
+                    .map(
+                      (c) => `
+                      <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.86rem;">
+                        <span>${c.qty}x ${escapeHtml(c.name)}</span>
+                        <strong>${brl(c.price * c.qty)}</strong>
+                      </div>
+                    `
+                    )
+                    .join("")
+            }
+            <hr style="margin:8px 0;border-color:var(--border);" />
+            <div style="display:flex;justify-content:space-between;font-size:1rem;">
+              <strong>Total</strong>
+              <strong>${brl(cartTotal)}</strong>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary full-btn" ${state.pdvCart.length === 0 ? "disabled" : ""}>Finalizar Pedido</button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("pdvCheckoutForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (state.pdvCart.length === 0) return;
+
+    const total = state.pdvCart.reduce((acc, i) => acc + i.price * i.qty, 0);
+    const itemsSummary = state.pdvCart.map((i) => `${i.qty}x ${i.name}`).join(", ");
+    const customer = document.getElementById("pdvCustomer").value.trim() || "Cliente Balcão";
+    const type = document.getElementById("pdvType").value;
+    const payment = document.getElementById("pdvPayment").value;
+
+    const newOrder = {
+      id: Math.floor(1000 + Math.random() * 9000),
+      customer,
+      type,
+      address: type === "Delivery" ? "Centro, Nilópolis - RJ" : "Retirada na loja",
+      items: itemsSummary,
+      total,
+      payment,
+      status: "Recebido",
+      createdAt: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    };
+
+    state.orders.unshift(newOrder);
+    state.transactions.unshift({
+      id: Date.now(),
+      date: new Date().toLocaleDateString("pt-BR"),
+      desc: `Pedido #${newOrder.id} (${customer})`,
+      type: "entrada",
+      amount: total
+    });
+    state.pdvCart = [];
+    persistState();
+    navigate("pedidos");
+  });
+}
+
+window.addToPdvCart = function (menuId) {
+  const item = (state.menu || []).find((m) => m.id === menuId);
+  if (!item) return;
+  const existing = state.pdvCart.find((c) => c.id === menuId);
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    state.pdvCart.push({ id: item.id, name: item.name, price: Number(item.price), qty: 1 });
+  }
+  persistState();
+  renderWorkspace();
+};
+
+/* 10. ENTREGAS */
+function renderEntregas(el) {
+  const deliveries = (state.orders || []).filter((o) => o.type === "Delivery");
+  el.innerHTML = `
+    <div class="card">
+      <h2>Entregas em Nilópolis (${deliveries.length})</h2>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table>
+          <thead><tr><th>#Pedido</th><th>Cliente</th><th>Endereço</th><th>Entregador</th><th>Status</th></tr></thead>
+          <tbody>
+            ${
+              deliveries.length === 0
+                ? `<tr><td colspan="5" style="color:var(--text-muted);">Nenhuma entrega cadastrada.</td></tr>`
+                : deliveries
+                    .map(
+                      (d) => `
+                <tr>
+                  <td>#${d.id}</td>
+                  <td>${escapeHtml(d.customer)}</td>
+                  <td>${escapeHtml(d.address)}</td>
+                  <td>${escapeHtml(d.courier || "Carlos Motoboy")}</td>
+                  <td><span class="badge orange">${escapeHtml(d.status)}</span></td>
+                </tr>
+              `
+                    )
+                    .join("")
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+/* 11. PROMOÇÕES */
+function renderPromocoes(el) {
+  el.innerHTML = `
+    <div class="card">
+      <h2>Cupons e Campanhas Ativas</h2>
+      <div class="grid-3" style="margin-top:12px;">
+        ${(state.coupons || [])
+          .map(
+            (c) => `
+            <div class="kpi-box">
+              <strong>${escapeHtml(c.code)}</strong>
+              <div class="kpi-num">${escapeHtml(c.discount)}</div>
+              <small style="color:var(--text-muted);">${escapeHtml(c.desc || "Válido em Nilópolis")}</small>
+            </div>
+          `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* 12. AVALIAÇÕES */
+function renderAvaliacoes(el) {
+  el.innerHTML = `
+    <div class="card">
+      <h2>Avaliações dos Clientes</h2>
+      <div style="display:grid;gap:10px;margin-top:12px;">
+        ${(state.reviews || [])
+          .map(
+            (r) => `
+            <div class="kpi-box">
+              <strong>${escapeHtml(r.customer)} • ${"⭐".repeat(Number(r.rating || 5))}</strong>
+              <p style="font-size:0.86rem;margin-top:6px;">${escapeHtml(r.comment)}</p>
+            </div>
+          `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* 13. RELATÓRIOS */
+function renderRelatorios(el) {
+  const totalOrders = (state.orders || []).length + 24;
+  const totalRevenue = (state.orders || []).reduce((acc, o) => acc + Number(o.total || 0), 0) + 722.5;
+  el.innerHTML = `
+    <div class="grid-3">
+      <div class="kpi-box"><div class="kpi-title">Pedidos Totais</div><div class="kpi-num">${totalOrders}</div></div>
+      <div class="kpi-box"><div class="kpi-title">Receita Acumulada</div><div class="kpi-num">${brl(totalRevenue)}</div></div>
+      <div class="kpi-box"><div class="kpi-title">Ticket Médio</div><div class="kpi-num">${brl(totalRevenue / totalOrders)}</div></div>
+    </div>
+  `;
+}
+
+/* 14. NOTIFICAÇÕES */
+function renderNotificacoes(el) {
+  el.innerHTML = `
+    <div class="card">
+      <div class="section-header">
+        <h2>Central de Notificações</h2>
+        <button type="button" class="btn-sm" onclick="markAllNotificationsRead()">Marcar todas como lidas</button>
+      </div>
+      <div style="display:grid;gap:8px;margin-top:12px;">
+        ${
+          (state.notifications || []).length === 0
+            ? `<p style="color:var(--text-muted);">Nenhuma notificação no momento.</p>`
+            : state.notifications
+                .map(
+                  (n) => `
+              <div class="kpi-box" style="opacity:${n.read ? 0.65 : 1};">
+                <strong>${escapeHtml(n.title)}</strong>
+                <p style="font-size:0.84rem;margin-top:4px;">${escapeHtml(n.text)}</p>
+              </div>
+            `
+                )
+                .join("")
+        }
+      </div>
+    </div>
+  `;
+}
+
+window.markAllNotificationsRead = function () {
+  (state.notifications || []).forEach((n) => {
+    n.read = true;
+  });
+  updateNotifyBadges();
+  persistState();
+  renderWorkspace();
+};
+
+/* 15. PERMISSÕES */
+function renderPermissoes(el) {
+  const roles = Object.keys(state.permissions || {});
+  el.innerHTML = `
+    <div class="card">
+      <h2>Permissões por Cargo</h2>
+      <div class="grid-2" style="margin-top:12px;">
+        ${roles
+          .map(
+            (role) => `
+            <div class="kpi-box">
+              <strong>${escapeHtml(role)}</strong>
+              <p style="font-size:0.82rem;color:var(--text-muted);margin-top:6px;">
+                ${(state.permissions[role] || []).length} módulos habilitados
+              </p>
+            </div>
+          `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* 16. CONFIGURAÇÕES */
+function renderConfiguracoes(el) {
+  el.innerHTML = `
+    <div class="card">
+      <h2>Configurações da Hamburgueria</h2>
+      <form id="shopSettingsForm" style="margin-top:12px;max-width:520px;">
+        <div class="form-group">
+          <label>Nome da unidade</label>
+          <input type="text" id="cfgShopName" value="${escapeHtml(state.shopName)}" required />
+        </div>
+        <div class="form-group">
+          <label>Código de convite da equipe</label>
+          <input type="text" id="cfgShopCode" value="${escapeHtml(state.shopCode)}" required />
+        </div>
+        <div class="form-group">
+          <label>Meta diária (R$)</label>
+          <input type="number" id="cfgDailyGoal" value="${Number(state.dailyGoal || 1500)}" required />
+        </div>
+        <button type="submit" class="btn-primary">Salvar Configurações</button>
+      </form>
+    </div>
+  `;
+
+  document.getElementById("shopSettingsForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    state.shopName = document.getElementById("cfgShopName").value.trim();
+    state.shopCode = document.getElementById("cfgShopCode").value.trim();
+    state.dailyGoal = Number(document.getElementById("cfgDailyGoal").value || 1500);
+    persistState();
+    navigate("configuracoes");
+  });
+}
+
+/* INICIALIZAÇÃO GLOBAL */
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".nav-item[data-section]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navigate(btn.dataset.section);
+    });
+  });
+
+  document.getElementById("logoutBtn")?.addEventListener("click", () => {
+    window.BunkerAuth?.logout();
+  });
+
+  document.getElementById("mobileMenuBtn")?.addEventListener("click", () => {
+    document.getElementById("appShell")?.classList.toggle("mobile-open");
+  });
+
+  document.getElementById("closeModalBtn")?.addEventListener("click", closeModal);
+  document.getElementById("appModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "appModal") closeModal();
+  });
+
+  document.getElementById("globalSearchInput")?.addEventListener("input", (e) => {
+    state.searchQuery = e.target.value || "";
+    renderWorkspace();
+  });
+
+  document.getElementById("topbarNotifyBtn")?.addEventListener("click", () => {
+    navigate("notificacoes");
+  });
+
+  updateNotifyBadges();
+
+  if (window.BunkerAuth && typeof window.BunkerAuth.init === "function") {
+    window.BunkerAuth.init((user) => {
+      state.currentUser = user;
+      mergePortalStaffIntoState();
+      persistState();
+      applyRolePermissions();
+      navigate(state.activeSection || "visao-geral");
+    });
+  } else {
+    applyRolePermissions();
+    navigate("visao-geral");
+  }
+});
