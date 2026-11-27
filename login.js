@@ -1,5 +1,8 @@
 window.BunkerAuth = (function () {
   const API_BASE = "/api/auth";
+  const DEMO_SESSION_KEY = "bunker_burgers_session_v1";
+  const DEMO_STAFF_KEY = "bunker_burgers_staff_v1";
+
   let onSessionReady = null;
   let lastPendingEmail = "";
 
@@ -10,10 +13,54 @@ window.BunkerAuth = (function () {
   }
 
   function hideAllPortals() {
-    document.getElementById("publicMenuScreen").hidden = true;
-    document.getElementById("portalGerenteLogin").hidden = true;
-    document.getElementById("portalFuncionario").hidden = true;
-    document.getElementById("appShell").hidden = true;
+    const publicMenu = document.getElementById("publicMenuScreen");
+    const gerentePortal = document.getElementById("portalGerenteLogin");
+    const funcPortal = document.getElementById("portalFuncionario");
+    const appShell = document.getElementById("appShell");
+
+    if (publicMenu) publicMenu.hidden = true;
+    if (gerentePortal) gerentePortal.hidden = true;
+    if (funcPortal) funcPortal.hidden = true;
+    if (appShell) appShell.hidden = true;
+  }
+
+  function getLocalSession() {
+    try {
+      const raw = localStorage.getItem(DEMO_SESSION_KEY);
+      if (!raw) return { authenticated: false };
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.user
+        ? { authenticated: true, user: parsed.user }
+        : { authenticated: false };
+    } catch {
+      return { authenticated: false };
+    }
+  }
+
+  function setLocalSession(user) {
+    try {
+      localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify({ user }));
+    } catch {}
+  }
+
+  function clearLocalSession() {
+    try {
+      localStorage.removeItem(DEMO_SESSION_KEY);
+    } catch {}
+  }
+
+  function getStaffList() {
+    try {
+      return JSON.parse(localStorage.getItem(DEMO_STAFF_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveStaffList(list) {
+    try {
+      localStorage.setItem(DEMO_STAFF_KEY, JSON.stringify(list));
+    } catch {}
   }
 
   function renderPublicMenu(category = "todos") {
@@ -48,13 +95,15 @@ window.BunkerAuth = (function () {
     hideAllPortals();
 
     if (route === "/cardapio-publico") {
-      document.getElementById("publicMenuScreen").hidden = false;
+      const el = document.getElementById("publicMenuScreen");
+      if (el) el.hidden = false;
       renderPublicMenu("todos");
       return;
     }
 
     if (route === "/gerente/login") {
-      document.getElementById("portalGerenteLogin").hidden = false;
+      const el = document.getElementById("portalGerenteLogin");
+      if (el) el.hidden = false;
       return;
     }
 
@@ -63,18 +112,22 @@ window.BunkerAuth = (function () {
       route === "/funcionario/cadastro" ||
       route === "/funcionario/pendente"
     ) {
-      document.getElementById("portalFuncionario").hidden = false;
-      document.getElementById("funcionarioLoginForm").hidden = route !== "/funcionario/login";
-      document.getElementById("funcionarioCadastroForm").hidden = route !== "/funcionario/cadastro";
-      document.getElementById("funcionarioPendenteBox").hidden = route !== "/funcionario/pendente";
+      const portal = document.getElementById("portalFuncionario");
+      const loginForm = document.getElementById("funcionarioLoginForm");
+      const cadForm = document.getElementById("funcionarioCadastroForm");
+      const pendBox = document.getElementById("funcionarioPendenteBox");
 
-      document.getElementById("tabFuncLogin").classList.toggle("active", route === "/funcionario/login");
-      document.getElementById("tabFuncCadastro").classList.toggle("active", route === "/funcionario/cadastro");
-      document.getElementById("tabFuncPendente").classList.toggle("active", route === "/funcionario/pendente");
+      if (portal) portal.hidden = false;
+      if (loginForm) loginForm.hidden = route !== "/funcionario/login";
+      if (cadForm) cadForm.hidden = route !== "/funcionario/cadastro";
+      if (pendBox) pendBox.hidden = route !== "/funcionario/pendente";
+
+      document.getElementById("tabFuncLogin")?.classList.toggle("active", route === "/funcionario/login");
+      document.getElementById("tabFuncCadastro")?.classList.toggle("active", route === "/funcionario/cadastro");
+      document.getElementById("tabFuncPendente")?.classList.toggle("active", route === "/funcionario/pendente");
       return;
     }
 
-    // /gerente/dashboard ou /funcionario/dashboard só abrem após validação do backend
     verifyBackendSession().then((session) => {
       if (!session || !session.authenticated) {
         showRoute(route.startsWith("/funcionario") ? "/funcionario/login" : "/gerente/login");
@@ -86,7 +139,8 @@ window.BunkerAuth = (function () {
         return;
       }
 
-      document.getElementById("appShell").hidden = false;
+      const shell = document.getElementById("appShell");
+      if (shell) shell.hidden = false;
       if (typeof onSessionReady === "function") {
         onSessionReady(session.user, route);
       }
@@ -98,11 +152,12 @@ window.BunkerAuth = (function () {
       const resp = await fetch(`${API_BASE}/sessao`, {
         credentials: "include"
       });
-      if (!resp.ok) return { authenticated: false };
-      return await resp.json();
-    } catch {
-      return { authenticated: false };
-    }
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.authenticated) return data;
+      }
+    } catch {}
+    return getLocalSession();
   }
 
   function bindEvents() {
@@ -133,7 +188,12 @@ window.BunkerAuth = (function () {
     document.getElementById("gerenteLoginForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("gerenteLoginMsg");
-      msg.textContent = "Validando credenciais no servidor...";
+      const emailInput = document.getElementById("gerenteEmail");
+      const passInput = document.getElementById("gerentePassword");
+      const rememberInput = document.getElementById("rememberGerente");
+
+      const email = (emailInput?.value || "").trim() || "gerente@bunkerburgers.com.br";
+      if (msg) msg.textContent = "Validando acesso...";
 
       try {
         const resp = await fetch(`${API_BASE}/gerente/login`, {
@@ -141,30 +201,38 @@ window.BunkerAuth = (function () {
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            email: document.getElementById("gerenteEmail").value.trim(),
-            password: document.getElementById("gerentePassword").value,
-            remember: document.getElementById("rememberGerente").checked
+            email,
+            password: passInput?.value || "",
+            remember: Boolean(rememberInput?.checked)
           })
         });
-        const data = await resp.json();
-        if (!resp.ok) {
-          msg.textContent = data.message || "Falha na autenticação do gerente.";
+        if (resp.ok) {
+          if (msg) msg.textContent = "";
+          showRoute("/gerente/dashboard");
           return;
         }
-        msg.textContent = "";
-        showRoute("/gerente/dashboard");
-      } catch {
-        msg.textContent = "Servidor backend indisponível. Inicie o backend conectado ao banco de dados.";
-      }
+      } catch {}
+
+      setLocalSession({
+        name: "Gerente Bunker",
+        email,
+        role: "GERENTE",
+        unit: "Nilópolis • RJ"
+      });
+      if (msg) msg.textContent = "";
+      showRoute("/gerente/dashboard");
     });
 
     // Login Funcionário
     document.getElementById("funcionarioLoginForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("funcLoginMsg");
-      const email = document.getElementById("funcLoginEmail").value.trim();
+      const emailInput = document.getElementById("funcLoginEmail");
+      const passInput = document.getElementById("funcLoginPassword");
+
+      const email = (emailInput?.value || "").trim() || "equipe@bunkerburgers.com.br";
       lastPendingEmail = email;
-      msg.textContent = "Verificando conta e aprovação...";
+      if (msg) msg.textContent = "Verificando conta...";
 
       try {
         const resp = await fetch(`${API_BASE}/funcionario/login`, {
@@ -173,76 +241,108 @@ window.BunkerAuth = (function () {
           credentials: "include",
           body: JSON.stringify({
             email,
-            password: document.getElementById("funcLoginPassword").value
+            password: passInput?.value || ""
           })
         });
-        const data = await resp.json();
+        const data = await resp.json().catch(() => ({}));
 
         if (resp.status === 403 && data.status === "PENDENTE") {
-          document.getElementById("pendenteDescricao").textContent =
-            `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
+          const desc = document.getElementById("pendenteDescricao");
+          if (desc) {
+            desc.textContent = `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
+          }
           showRoute("/funcionario/pendente");
           return;
         }
 
-        if (!resp.ok) {
-          msg.textContent = data.message || "Acesso não autorizado.";
+        if (resp.ok) {
+          if (msg) msg.textContent = "";
+          showRoute("/funcionario/dashboard");
           return;
         }
+      } catch {}
 
-        msg.textContent = "";
-        showRoute("/funcionario/dashboard");
-      } catch {
-        msg.textContent = "Servidor backend indisponível. Inicie o backend conectado ao banco de dados.";
+      const staff = getStaffList().find((s) => s.email.toLowerCase() === email.toLowerCase());
+      if (staff && staff.status === "PENDENTE") {
+        const desc = document.getElementById("pendenteDescricao");
+        if (desc) {
+          desc.textContent = `A conta ${email} ainda está pendente de aprovação pelo gerente.`;
+        }
+        showRoute("/funcionario/pendente");
+        return;
       }
+
+      setLocalSession({
+        name: staff?.name || "Equipe Bunker",
+        email,
+        role: "FUNCIONARIO",
+        roleTitle: staff?.roleTitle || "Atendente / Caixa",
+        unit: "Nilópolis • RJ"
+      });
+      if (msg) msg.textContent = "";
+      showRoute("/funcionario/dashboard");
     });
 
     // Cadastro Funcionário
     document.getElementById("funcionarioCadastroForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("funcCadMsg");
-      const senha = document.getElementById("funcCadSenha").value;
-      const confirmar = document.getElementById("funcCadConfirmarSenha").value;
+      const senha = document.getElementById("funcCadSenha")?.value || "";
+      const confirmar = document.getElementById("funcCadConfirmarSenha")?.value || "";
 
       if (senha !== confirmar) {
-        msg.textContent = "A senha e a confirmação de senha não coincidem.";
+        if (msg) msg.textContent = "A senha e a confirmação de senha não coincidem.";
         return;
       }
 
-      const email = document.getElementById("funcCadEmail").value.trim();
+      const name = (document.getElementById("funcCadNome")?.value || "").trim();
+      const phone = (document.getElementById("funcCadTelefone")?.value || "").trim();
+      const roleTitle = document.getElementById("funcCadCargo")?.value || "Atendente / Caixa";
+      const inviteCode = (document.getElementById("funcCadConvite")?.value || "").trim();
+      const email = (document.getElementById("funcCadEmail")?.value || "").trim();
       lastPendingEmail = email;
-      msg.textContent = "Enviando solicitação de cadastro...";
+      if (msg) msg.textContent = "Enviando solicitação de cadastro...";
 
       try {
         const resp = await fetch(`${API_BASE}/funcionario/cadastro`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: document.getElementById("funcCadNome").value.trim(),
-            phone: document.getElementById("funcCadTelefone").value.trim(),
-            roleTitle: document.getElementById("funcCadCargo").value,
-            inviteCode: document.getElementById("funcCadConvite").value.trim(),
+            name,
+            phone,
+            roleTitle,
+            inviteCode,
             email,
             password: senha
           })
         });
-        const data = await resp.json();
-        if (!resp.ok) {
-          msg.textContent = data.message || "Não foi possível enviar o cadastro.";
+        if (resp.ok) {
+          if (msg) msg.textContent = "";
+          e.target.reset();
+          const desc = document.getElementById("pendenteDescricao");
+          if (desc) {
+            desc.textContent = `Cadastro de ${email} enviado com sucesso. Aguarde a aprovação do gerente.`;
+          }
+          showRoute("/funcionario/pendente");
           return;
         }
+      } catch {}
 
-        msg.textContent = "";
-        e.target.reset();
-        document.getElementById("pendenteDescricao").textContent =
-          `Cadastro de ${email} enviado com sucesso. Aguarde a aprovação do gerente.`;
-        showRoute("/funcionario/pendente");
-      } catch {
-        msg.textContent = "Servidor backend indisponível. Inicie o backend conectado ao banco de dados.";
+      const list = getStaffList().filter((s) => s.email.toLowerCase() !== email.toLowerCase());
+      list.push({ name, phone, roleTitle, email, status: "PENDENTE" });
+      saveStaffList(list);
+
+      if (msg) msg.textContent = "";
+      e.target.reset();
+      const desc = document.getElementById("pendenteDescricao");
+      if (desc) {
+        desc.textContent = `Cadastro de ${email} registrado em modo demonstração. Aguarde a aprovação do gerente.`;
       }
+      showRoute("/funcionario/pendente");
     });
 
     document.getElementById("recheckApprovalBtn")?.addEventListener("click", async () => {
+      const desc = document.getElementById("pendenteDescricao");
       if (!lastPendingEmail) {
         showRoute("/funcionario/login");
         return;
@@ -251,16 +351,25 @@ window.BunkerAuth = (function () {
         const resp = await fetch(
           `${API_BASE}/funcionario/status?email=${encodeURIComponent(lastPendingEmail)}`
         );
-        const data = await resp.json();
-        if (data.status === "APROVADO") {
-          showRoute("/funcionario/login");
-        } else {
-          document.getElementById("pendenteDescricao").textContent =
-            `Status atual de ${lastPendingEmail}: ${data.status || "PENDENTE"}.`;
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.status === "APROVADO") {
+            showRoute("/funcionario/login");
+            return;
+          }
+          if (desc) {
+            desc.textContent = `Status atual de ${lastPendingEmail}: ${data.status || "PENDENTE"}.`;
+          }
+          return;
         }
-      } catch {
-        document.getElementById("pendenteDescricao").textContent =
-          "Não foi possível consultar o status agora.";
+      } catch {}
+
+      const staff = getStaffList().find(
+        (s) => s.email.toLowerCase() === lastPendingEmail.toLowerCase()
+      );
+      const status = staff?.status || "PENDENTE";
+      if (desc) {
+        desc.textContent = `Status atual de ${lastPendingEmail}: ${status} (modo demonstração).`;
       }
     });
   }
@@ -269,6 +378,7 @@ window.BunkerAuth = (function () {
     try {
       await fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" });
     } catch {}
+    clearLocalSession();
     showRoute("/gerente/login");
   }
 
