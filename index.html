@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bunker Burgers Nilópolis — Sistema & Cardápio</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/login.css" />
+</head>
+<body>
+  <!-- CARDÁPIO PÚBLICO (ACESSO DIRETO SEM LOGIN) -->
+  <section class="public-menu-screen" id="publicMenuScreen" hidden aria-label="Cardápio público Bunker Burgers">
+    <header class="public-topbar">
+      <div class="login-brand">
+        <span class="login-brand-mark">B</span>
+        <div>
+          <span class="login-brand-name">BUNKER BURGERS</span>
+          <span class="public-sub">Nilópolis • RJ — Cardápio Público</span>
+        </div>
+      </div>
+
+      <div class="public-actions">
+        <button type="button" class="btn-outline" data-route="/funcionario/login">Portal Funcionário</button>
+        <button type="button" class="btn-primary" data-route="/gerente/login">Portal Gerente</button>
+      </div>
+    </header>
+
+    <div class="public-hero">
+      <div>
+        <h1>Bunker Burgers — <span>Nilópolis/RJ</span></h1>
+        <p>Smash burgers artesanais na chapa, combos caprichados e acompanhamentos feitos na hora. Peça ou explore sem login.</p>
+      </div>
+    </div>
+
+    <div class="public-content">
+      <div class="public-filters" id="publicCategoryFilters">
+        <button type="button" class="pill-btn active" data-pub-cat="todos">Todos</button>
+        <button type="button" class="pill-btn" data-pub-cat="burgers">Burgers</button>
+        <button type="button" class="pill-btn" data-pub-cat="combos">Combos</button>
+        <button type="button" class="pill-btn" data-pub-cat="acompanhamentos">Acompanhamentos</button>
+        <button type="button" class="pill-btn" data-pub-cat="bebidas">Bebidas</button>
+      </div>
+      <div class="menu-grid" id="publicMenuGrid"></div>
+    </div>
+  </section>
+
+  <!-- PORTAL DO GERENTE (/gerente/login) -->
+  <section class="auth-portal-screen" id="portalGerenteLogin" hidden aria-label="Login do Gerente">
+    <div class="login-split-card">
+      <div class="login-left-panel">
+        <div>
+          <div class="login-brand">
+            <span class="login-brand-mark">B</span>
+            <span class="login-brand-name">BUNKER BURGERS</span>
+            <span class="login-brand-tag">Gerente</span>
+          </div>
+
+          <div class="login-hero-copy">
+            <h1>Manage your<br />Restaurant, <span>Smarter</span></h1>
+            <p>Acesso exclusivo da gerência da Bunker Burgers — Nilópolis/RJ. Sem cadastro público de gerentes.</p>
+          </div>
+
+          <form class="manager-login-form" id="gerenteLoginForm">
+            <div class="login-input-wrap">
+              <input type="email" id="gerenteEmail" class="login-input" placeholder="E-mail do gerente" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="password" id="gerentePassword" class="login-input" placeholder="Senha" required />
+              <button type="button" class="toggle-pass-btn" data-toggle-target="gerentePassword" aria-label="Mostrar senha">👁</button>
+            </div>
+
+            <div class="login-options-row">
+              <label class="remember-label">
+                <input type="checkbox" id="rememberGerente" />
+                <span>Lembrar sessão</span>
+              </label>
+              <button type="button" class="forgot-pass-link" data-route="/funcionario/login">Acesso Funcionário</button>
+            </div>
+
+            <p class="login-status-msg" id="gerenteLoginMsg"></p>
+
+            <button type="submit" class="manager-signin-btn">Entrar como Gerente</button>
+
+            <div class="login-signup-row">
+              <button type="button" class="login-signup-link" data-route="/cardapio-publico">← Ver cardápio público sem login</button>
+            </div>
+          </form>
+        </div>
+
+        <footer class="login-footer">
+          Sistema de Gestão de Hamburgueria • Bunker Burgers Nilópolis<br />
+          © 2026 – Todos os direitos reservados.
+        </footer>
+      </div>
+
+      <div class="login-right-panel" aria-hidden="true">
+        <div class="abstract-tube tube-one"></div>
+        <div class="abstract-tube tube-two"></div>
+        <div class="abstract-tube tube-three"></div>
+        <div class="login-art-caption">
+          <strong>Bunker Burgers • Nilópolis - RJ</strong>
+          <span>Administração • Finanças • Equipe • Estoque</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PORTAL DOS FUNCIONÁRIOS (/funcionario/login, /funcionario/cadastro, /funcionario/pendente) -->
+  <section class="auth-portal-screen" id="portalFuncionario" hidden aria-label="Portal dos Funcionários">
+    <div class="login-split-card staff-split-card">
+      <div class="login-left-panel">
+        <div>
+          <div class="login-brand">
+            <span class="login-brand-mark">B</span>
+            <span class="login-brand-name">BUNKER BURGERS</span>
+            <span class="login-brand-tag">Equipe</span>
+          </div>
+
+          <div class="staff-mode-switch">
+            <button type="button" class="staff-mode-btn active" id="tabFuncLogin" data-route="/funcionario/login">Login</button>
+            <button type="button" class="staff-mode-btn" id="tabFuncCadastro" data-route="/funcionario/cadastro">Cadastro</button>
+            <button type="button" class="staff-mode-btn" id="tabFuncPendente" data-route="/funcionario/pendente">Status</button>
+          </div>
+
+          <!-- Login do Funcionário -->
+          <form class="manager-login-form" id="funcionarioLoginForm">
+            <div class="login-hero-copy" style="margin: 12px 0 14px;">
+              <h2>Portal da <span>Equipe</span></h2>
+              <p>Entre com seu e-mail e senha aprovados pela gerência.</p>
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="email" id="funcLoginEmail" class="login-input" placeholder="E-mail profissional" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="password" id="funcLoginPassword" class="login-input" placeholder="Senha" required />
+              <button type="button" class="toggle-pass-btn" data-toggle-target="funcLoginPassword" aria-label="Mostrar senha">👁</button>
+            </div>
+
+            <p class="login-status-msg" id="funcLoginMsg"></p>
+            <button type="submit" class="manager-signin-btn">Acessar Painel</button>
+
+            <div class="login-signup-row">
+              <span>Ainda não tem conta?</span>
+              <button type="button" class="login-signup-link" data-route="/funcionario/cadastro">Solicitar cadastro</button>
+            </div>
+          </form>
+
+          <!-- Cadastro do Funcionário -->
+          <form class="manager-login-form" id="funcionarioCadastroForm" hidden>
+            <div class="login-hero-copy" style="margin: 10px 0 12px;">
+              <h2>Cadastro de <span>Funcionário</span></h2>
+              <p>Preencha seus dados e o código de convite para análise do gerente.</p>
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="text" id="funcCadNome" class="login-input" placeholder="Nome completo" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="tel" id="funcCadTelefone" class="login-input" placeholder="Telefone (ex.: (21) 99999-9999)" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <select id="funcCadCargo" class="login-input" required>
+                <option value="">Selecione o cargo</option>
+                <option value="Atendente">Atendente / Caixa</option>
+                <option value="Chapeiro">Chapeiro / Cozinha</option>
+                <option value="Motoboy">Entregador / Motoboy</option>
+              </select>
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="text" id="funcCadConvite" class="login-input" placeholder="Código de convite da hamburgueria" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="email" id="funcCadEmail" class="login-input" placeholder="E-mail" required />
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="password" id="funcCadSenha" class="login-input" placeholder="Senha (mín. 8 caracteres)" minlength="8" required />
+              <button type="button" class="toggle-pass-btn" data-toggle-target="funcCadSenha" aria-label="Mostrar senha">👁</button>
+            </div>
+
+            <div class="login-input-wrap">
+              <input type="password" id="funcCadConfirmarSenha" class="login-input" placeholder="Confirmação de senha" minlength="8" required />
+              <button type="button" class="toggle-pass-btn" data-toggle-target="funcCadConfirmarSenha" aria-label="Mostrar confirmação de senha">👁</button>
+            </div>
+
+            <p class="login-status-msg" id="funcCadMsg"></p>
+            <button type="submit" class="manager-signin-btn">Enviar Cadastro</button>
+          </form>
+
+          <!-- Tela de Aguardando Aprovação (/funcionario/pendente) -->
+          <div class="pending-box" id="funcionarioPendenteBox" hidden>
+            <span class="badge orange">Aguardando aprovação</span>
+            <h2 style="margin: 10px 0 6px;">Cadastro em Análise</h2>
+            <p id="pendenteDescricao">
+              Seu cadastro foi registrado e aguarda aprovação do gerente do Bunker Burgers — Nilópolis/RJ.
+            </p>
+            <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+              <button type="button" class="manager-signin-btn" id="recheckApprovalBtn">Verificar Aprovação</button>
+              <button type="button" class="forgot-pass-link" data-route="/funcionario/login">Voltar ao login</button>
+            </div>
+          </div>
+
+          <div class="login-signup-row" style="margin-top: 14px;">
+            <button type="button" class="login-signup-link" data-route="/cardapio-publico">← Cardápio público</button>
+            <span> • </span>
+            <button type="button" class="login-signup-link" data-route="/gerente/login">Login Gerente</button>
+          </div>
+        </div>
+
+        <footer class="login-footer">
+          Sistema de Gestão de Hamburgueria • © 2026 – Todos os direitos reservados.
+        </footer>
+      </div>
+
+      <!-- Lateral com Foto de Hambúrguer -->
+      <div class="staff-burger-panel">
+        <img
+          src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80"
+          alt="Hambúrguer artesanal Bunker Burgers Nilópolis"
+          class="staff-burger-img"
+        />
+        <div class="staff-burger-overlay">
+          <strong>Bunker Burgers • Nilópolis/RJ</strong>
+          <span>Qualidade na chapa, agilidade no atendimento e entregas.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD PRINCIPAL (GERENTE E FUNCIONÁRIO APROVADO) -->
+  <div class="app-shell" id="appShell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo" aria-hidden="true">B</div>
+        <div class="brand-text">
+          <span class="brand-name">Bunker Burgers</span>
+          <span class="brand-sub">Nilópolis • RJ</span>
+        </div>
+        <button class="icon-btn mobile-close" id="closeSidebarBtn" type="button" aria-label="Fechar menu">✕</button>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebarNav" aria-label="Menu administrativo">
+        <div class="nav-group open">
+          <button class="nav-item active" type="button" data-section="visao-geral" data-has-sub="true">
+            <span class="nav-icon">⊞</span>
+            <span class="nav-label">1. Visão geral</span>
+            <span class="nav-arrow">›</span>
+          </button>
+          <ul class="sub-menu">
+            <li><button type="button" class="sub-link active" data-section="visao-geral" data-theme="dark">Painel Dark</button></li>
+            <li><button type="button" class="sub-link" data-section="visao-geral" data-theme="light">Painel Light</button></li>
+            <li><button type="button" class="sub-link" data-section="relatorios">Resumo de Vendas</button></li>
+          </ul>
+        </div>
+
+        <button class="nav-item" type="button" data-section="pedidos">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">2. Pedidos</span>
+        </button>
+
+        <div class="nav-group">
+          <button class="nav-item" type="button" data-section="cardapio" data-has-sub="true">
+            <span class="nav-icon">🍔</span>
+            <span class="nav-label">3. Cardápio digital</span>
+            <span class="nav-arrow">›</span>
+          </button>
+          <ul class="sub-menu">
+            <li><button type="button" class="sub-link" data-section="cardapio" data-cat="todos">Todos os Itens</button></li>
+            <li><button type="button" class="sub-link" data-section="cardapio" data-cat="burgers">Burgers Artesanais</button></li>
+            <li><button type="button" class="sub-link" data-section="cardapio" data-cat="combos">Combos</button></li>
+            <li><button type="button" class="sub-link" data-section="cardapio" data-cat="acompanhamentos">Acompanhamentos</button></li>
+            <li><button type="button" class="sub-link" data-section="cardapio" data-cat="bebidas">Bebidas</button></li>
+          </ul>
+        </div>
+
+        <button class="nav-item" type="button" data-section="clientes">
+          <span class="nav-icon">🧑</span>
+          <span class="nav-label">4. Clientes</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="funcionarios">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">5. Funcionários</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="cozinha">
+          <span class="nav-icon">🔥</span>
+          <span class="nav-label">6. Controle da cozinha</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="estoque">
+          <span class="nav-icon">📦</span>
+          <span class="nav-label">7. Controle de estoque</span>
+        </button>
+
+        <div class="nav-group">
+          <button class="nav-item" type="button" data-section="financeiro" data-has-sub="true">
+            <span class="nav-icon">💰</span>
+            <span class="nav-label">8. Financeiro</span>
+            <span class="nav-arrow">›</span>
+          </button>
+          <ul class="sub-menu">
+            <li><button type="button" class="sub-link" data-section="financeiro">Receitas e Despesas</button></li>
+            <li><button type="button" class="sub-link" data-section="pdv">Abertura / Fechamento Caixa</button></li>
+          </ul>
+        </div>
+
+        <button class="nav-item" type="button" data-section="pdv">
+          <span class="nav-icon">🖥️</span>
+          <span class="nav-label">9. Frente de caixa (PDV)</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="entregas">
+          <span class="nav-icon">🛵</span>
+          <span class="nav-label">10. Entregas</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="promocoes">
+          <span class="nav-icon">🏷️</span>
+          <span class="nav-label">11. Promoções e cupons</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="avaliacoes">
+          <span class="nav-icon">⭐</span>
+          <span class="nav-label">12. Avaliações</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="relatorios">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">13. Relatórios de vendas</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="notificacoes">
+          <span class="nav-icon">🔔</span>
+          <span class="nav-label">14. Notificações</span>
+          <span class="nav-badge" id="sidebarNotifyBadge">0</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="permissoes">
+          <span class="nav-icon">🔐</span>
+          <span class="nav-label">15. Permissões de acesso</span>
+        </button>
+
+        <button class="nav-item" type="button" data-section="configuracoes">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">16. Configurações</span>
+        </button>
+
+        <button class="nav-item logout-item" type="button" id="logoutBtn">
+          <span class="nav-icon">🚪</span>
+          <span class="nav-label">17. Sair do sistema</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <p class="footer-title">Sistema de Gestão de Hamburgueria</p>
+        <p class="footer-copy">© 2026 – Todos os direitos reservados.</p>
+      </div>
+    </aside>
+
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn" id="toggleSidebarBtn" type="button" title="Recolher ou expandir menu lateral" aria-label="Recolher menu lateral">☰</button>
+          <div>
+            <h1 class="page-title" id="pageTitle">1. Visão geral</h1>
+            <span class="page-sub" id="pageSub">Bunker Burgers Nilópolis • Painel Administrativo</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <label class="search-box">
+            <input type="search" id="globalSearch" placeholder="Buscar pedido, lanche, cliente..." />
+            <span class="search-icon">🔍</span>
+          </label>
+
+          <button class="icon-btn badge-btn" type="button" id="topbarNotifyBtn" title="Ver notificações">
+            🔔<span class="dot" id="topbarNotifyDot"></span>
+          </button>
+
+          <button class="icon-btn" type="button" id="quickPdvBtn" title="Abrir Frente de Caixa (PDV)">
+            🖥️
+          </button>
+
+          <div class="profile-box">
+            <div class="profile-avatar" aria-hidden="true">👨‍🍳</div>
+            <div class="profile-info">
+              <span class="profile-name" id="activeUserName">Usuário</span>
+              <span class="profile-role" id="activeUserRole">Cargo • Nilópolis</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace" id="workspace"></main>
+    </div>
+  </div>
+
+  <!-- MODAL GENÉRICO -->
+  <div class="modal-backdrop" id="appModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <h3 id="modalTitle">Modal</h3>
+        <button type="button" class="icon-btn" id="closeModalBtn" aria-label="Fechar janela">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/login.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.BunkerAuth && typeof window.BunkerAuth.init === "function") {
+        window.BunkerAuth.init((user) => {
+          if (typeof window.enterApp === "function") {
+            window.enterApp(user);
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

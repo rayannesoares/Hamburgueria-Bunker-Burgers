@@ -1,0 +1,21 @@
+# Variáveis de ambiente e chaves sensíveis (Supabase, APIs, etc.)
+.env
+.env.local
+.env.*.local
+config.local.js
+
+# Dependências (caso use Node/npm no futuro)
+node_modules/
+
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs e cache
+*.log
+npm-debug.log*
+.cache/
+
+# Configurações locais de editor (opcional)
+.vscode/
