@@ -250,6 +250,11 @@ window.BunkerAuth = (function () {
         return;
       }
 
+      if (existing && (String(existing.status).toUpperCase() === "RECUSADO" || String(existing.status).toUpperCase() === "BLOQUEADO")) {
+        if (msg) msg.textContent = "Acesso recusado ou bloqueado pela gerência.";
+        return;
+      }
+
       setSession({
         name: existing?.name || "Equipe Bunker",
         email,
@@ -352,4 +357,4 @@ window.BunkerAuth = (function () {
     approveStaff: (emailOrId) => setStaffStatus(emailOrId, "APROVADO"),
     rejectStaff: (emailOrId) => setStaffStatus(emailOrId, "RECUSADO")
   };
-})();
+})();s
